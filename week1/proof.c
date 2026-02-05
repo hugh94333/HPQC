@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <stdio.h>			//adds in libraries
 #include <stdlib.h>
 #include <mpi.h>
 
@@ -137,3 +137,5 @@ void check_task(int uni_size, int my_rank, int num_arg)
 		client_task(my_rank, num_arg);
 	} // end else // i.e. (0 != my_rank)
 }
+// the main funciton multiplies the rank by an integer and sends it to the root
+// if my integer is 6 and i have 3 clients the root recieves 6, 12, 18 and returns 36

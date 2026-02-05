@@ -138,4 +138,6 @@ void check_task(int uni_size, int my_rank, int num_arg)
 	} // end else // i.e. (0 != my_rank)
 }
 // the main funciton multiplies the rank by an integer and sends it to the root
+// there also checks on args and uni_size, also initialize parameters to zero. Arg is 0 do root task arg is >0 d client task
 // if my integer is 6 and i have 3 clients the root recieves 6, 12, 18 and returns 36
+//the same result could be reached by just multiplying the integer by the sum of the ranks i.e. 6 *(1+2+3) =36

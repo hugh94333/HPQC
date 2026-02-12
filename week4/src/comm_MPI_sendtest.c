@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-// Initiallise MPI environment
+// Initialise MPI environment
 void initialise_mpi(int *argc, char ***argv)
 {
     MPI_Init(argc, argv);
@@ -79,12 +79,12 @@ void worker_process(int my_rank, int world_size)
     MPI_Status status;
     MPI_Request request;
 
-    // Synchronous Send
+    // Synchronous send
     message = my_rank * 1;
     MPI_Ssend(&message, count, MPI_INT, destination, tag, MPI_COMM_WORLD);
     printf("Rank %d sent MPI_Ssend: %d\n", my_rank, message);
 
-    // Buffered Send
+    //Buffered send
     int bufsize = MPI_BSEND_OVERHEAD + sizeof(int);
     void *buffer = malloc(bufsize);
     MPI_Buffer_attach(buffer, bufsize);

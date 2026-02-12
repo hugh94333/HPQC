@@ -1,11 +1,10 @@
 #include <stdio.h>
 #include <mpi.h>
 
-
 void initialise_mpi(int *argc, char ***argv);
 void get_rank_and_size(int *rank, int *size);
+void worker_process(int my_rank, int world_size);
 void finalise_mpi(void);
-
 
 // Main Program
 int main(int argc, char **argv)
@@ -16,20 +15,19 @@ int main(int argc, char **argv)
     // Initialise MPI
     initialise_mpi(&argc, &argv);
 
-    // Get rank and communicator size
+    // Get rank and size
     get_rank_and_size(&my_rank, &world_size);
 
-    // Original communication logic still in main
-
-    int send_message, recv_message, count, dest, source, tag;
-    send_message = recv_message = dest = source = tag = 0;
+    int recv_message, count, source, tag;
+    recv_message = source = tag = 0;
     count = 1;
     MPI_Status status;
 
     if (world_size > 1)
     {
-        if (0 == my_rank)
+        if (my_rank == 0)
         {
+            // Root processing
             for (int their_rank = 1; their_rank < world_size; their_rank++)
             {
                 source = their_rank;
@@ -43,14 +41,8 @@ int main(int argc, char **argv)
         }
         else
         {
-            dest = 0;
-            send_message = my_rank;
-
-            MPI_Send(&send_message, count, MPI_INT,
-                     dest, tag, MPI_COMM_WORLD);
-
-            printf("Hello, I am %d of %d. Sent %d to Rank %d\n",
-                   my_rank, world_size, send_message, dest);
+            // Worker logic moved to function
+            worker_process(my_rank, world_size);
         }
     }
     else
@@ -59,31 +51,41 @@ int main(int argc, char **argv)
                "MPI communicator size = %d\n", world_size);
     }
 
-    // Finalise MPI
     finalise_mpi();
-
     return 0;
 }
 
-//
-// Function Definitions
+// Function definitions
 
-// Initialise MPI environment
 void initialise_mpi(int *argc, char ***argv)
 {
     MPI_Init(argc, argv);
 }
 
-// Obtain rank and communicator size
 void get_rank_and_size(int *rank, int *size)
 {
     MPI_Comm_rank(MPI_COMM_WORLD, rank);
     MPI_Comm_size(MPI_COMM_WORLD, size);
 }
 
-// Finalise MPI environment
+// Worker process (non-root ranks)
+void worker_process(int my_rank, int world_size)
+{
+    int send_message;
+    int count = 1;
+    int tag = 0;
+    int destination = 0;
+
+    send_message = my_rank *1;
+
+    MPI_Send(&send_message, count, MPI_INT,
+             destination, tag, MPI_COMM_WORLD);
+
+    printf("Hello, I am %d of %d. Sent %d to Rank %d\n",
+           my_rank, world_size, send_message, destination);
+}
+
 void finalise_mpi(void)
 {
     MPI_Finalize();
 }
-

@@ -78,11 +78,14 @@ void worker_process(int my_rank, int world_size)
     int message;
     MPI_Status status;
     MPI_Request request;
+    double start_time, end_time;
 
     // Synchronous send
     message = my_rank * 1;
+    start_time = MPI_Wtime();
     MPI_Ssend(&message, count, MPI_INT, destination, tag, MPI_COMM_WORLD);
-    printf("Rank %d sent MPI_Ssend: %d\n", my_rank, message);
+    end_time = MPI_Wtime();
+    printf("Rank %d MPI_Ssend: %d, took %.6f s\n", my_rank, message, end_time - start_time);
 
     //Buffered send
     int bufsize = MPI_BSEND_OVERHEAD + sizeof(int);
@@ -90,22 +93,28 @@ void worker_process(int my_rank, int world_size)
     MPI_Buffer_attach(buffer, bufsize);
 
     message = my_rank * 10;
+    start_time = MPI_Wtime();
     MPI_Bsend(&message, count, MPI_INT, destination, tag, MPI_COMM_WORLD);
-    printf("Rank %d sent MPI_Bsend: %d\n", my_rank, message);
+    end_time = MPI_Wtime();
+    printf("Rank %d MPI_Bsend: %d, took %.6f s\n", my_rank, message, end_time - start_time);
 
     MPI_Buffer_detach(&buffer, &bufsize);
     free(buffer);
 
     // Ready send
     message = my_rank * 100;
+    start_time = MPI_Wtime();
     MPI_Rsend(&message, count, MPI_INT, destination, tag, MPI_COMM_WORLD);
-    printf("Rank %d sent MPI_Rsend: %d\n", my_rank, message);
+    end_time = MPI_Wtime();
+    printf("Rank %d MPI_Rsend: %d, took %.6f s\n", my_rank, message, end_time - start_time);
 
     // non blocking send
     message = my_rank * 1000;
+    start_time = MPI_Wtime();
     MPI_Isend(&message, count, MPI_INT, destination, tag, MPI_COMM_WORLD, &request);
     MPI_Wait(&request, MPI_STATUS_IGNORE);
-    printf("Rank %d sent MPI_Isend: %d\n", my_rank, message);
+    end_time = MPI_Wtime();
+    printf("Rank %d MPI_Isend: %d, took %.6f s\n", my_rank, message, end_time - start_time);
 }
 
 // Finalise MPI environment

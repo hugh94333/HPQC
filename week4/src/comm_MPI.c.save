@@ -1,0 +1,42 @@
+#include <stdio.h>
+#include <mpi.h>
+
+/* =============================== */
+/* Function Prototypes             */
+/* =============================== */
+void initialise_mpi(int *argc, char ***argv);
+void finalise_mpi(void);
+
+/* =============================== */
+/* Main Program                    */
+/* =============================== */
+int main(int argc, char **argv)
+{
+    /* MPI environment setup */
+    initialise_mpi(&argc, &argv);
+
+    /* The rest of the program is unchanged for now */
+    printf("MPI initialized successfully.\n");
+
+    /* Finalize MPI */
+    finalise_mpi();
+
+    return 0;
+}
+
+/* =============================== */
+/* Function Definitions            */
+/* =============================== */
+
+/* Initialise MPI environment */
+void initialise_mpi(int *argc, char ***argv)
+{
+    MPI_Init(argc, argv);
+}
+
+/* Finalise MPI environment */
+void finalise_mpi(void)
+{
+    MPI_Finalize();
+}
+

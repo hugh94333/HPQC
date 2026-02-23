@@ -8,9 +8,20 @@
 
 **animation_file_line.py**
 
-- removed hardcoding
+- removed hardcoding.
 
-- updated argument checks
+- updated argument checks.
 
-- output location also specified in command lien
+- output location also specified in command line.
 
+**string_wave_parallel.c**
+
+- the string is split into "equal" chunks, and each given to an MPI process.
+
+- each rank communicates with neighbours. gives first and last points.
+
+- rank updates postion for all the times
+
+- MPIGather gets all chunks at rank 0 to recombine string
+
+- only rank 0 writes to memory, avoiding any errors

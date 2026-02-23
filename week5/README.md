@@ -31,4 +31,5 @@
 
 - the communication is already parallel and i'm not aware of any way to write the file any faster
 
+- the animation breaks down with too many points on the string
 

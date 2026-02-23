@@ -25,3 +25,10 @@
 - MPIGather gets all chunks at rank 0 to recombine string
 
 - only rank 0 writes to memory, avoiding any errors
+
+
+- added benchmarking shows the communication and write time are the longest for large number of points
+
+- the communication is already parallel and i'm not aware of any way to write the file any faster
+
+

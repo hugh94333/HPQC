@@ -33,3 +33,11 @@
 
 - the animation breaks down with too many points on the string
 
+**Changed Updae_positions**
+
+- each point is like a mass connected with springs to neighbour
+
+- hook's law from both neighbours applied
+
+- added velocity and acceleration vectors, that change with each time step
+

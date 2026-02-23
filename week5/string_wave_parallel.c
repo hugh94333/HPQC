@@ -119,7 +119,6 @@ int main(int argc, char **argv)
 
         gather_time += MPI_Wtime() - t0;
 
-        
         if(rank == 0) {
             t0 = MPI_Wtime();
 
@@ -153,7 +152,6 @@ int main(int argc, char **argv)
         printf("Write time:         %f seconds\n", max_write);
         printf("==========================\n");
     }
-
 
     if(rank == 0) {
         fclose(out_file);
@@ -198,23 +196,52 @@ double driver(double time)
     return sin(2.0 * M_PI * time);
 }
 
+//new postion computation
+
 void update_positions(double* local_positions,
                       int local_size,
                       double left_val,
                       double time)
 {
-    double prev;
+    double k = 50.0;
+    double m = 1.0;
+    double dt = 0.01;
 
-    if(left_val != 0.0)
-        prev = left_val;
-    else
-        prev = driver(time);
+    static double* velocity = NULL;
+    static int initialized = 0;
 
-    for(int i = 0; i < local_size; i++) {
-        double temp = local_positions[i];
-        local_positions[i] = prev;
-        prev = temp;
+    if(!initialized) {
+        velocity = calloc(local_size, sizeof(double));
+        initialized = 1;
     }
+
+    double* acceleration = malloc(local_size * sizeof(double));
+
+    for(int i = 0; i < local_size; i++)
+    {
+        double y_left, y_right;
+
+        if(i == 0)
+            y_left = (left_val != 0.0) ? left_val : driver(time);
+        else
+            y_left = local_positions[i-1];
+
+        if(i == local_size - 1)
+            y_right = 0.0;
+        else
+            y_right = local_positions[i+1];
+
+        double force = k * (y_left - 2*local_positions[i] + y_right);
+        acceleration[i] = force / m;
+    }
+
+    for(int i = 0; i < local_size; i++)
+    {
+        velocity[i] += acceleration[i] * dt;
+        local_positions[i] += velocity[i] * dt;
+    }
+
+    free(acceleration);
 }
 
 void print_header(FILE* out_file, int points)

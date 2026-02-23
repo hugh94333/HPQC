@@ -33,7 +33,7 @@
 
 - the animation breaks down with too many points on the string
 
-**Changed Updae_positions**
+**Changed Update_positions**
 
 - each point is like a mass connected with springs to neighbour
 

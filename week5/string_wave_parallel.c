@@ -11,25 +11,27 @@ typedef struct {
     char output_file[256];
 } ProgramOptions;
 
-//Function Declarations
+//Functions
 ProgramOptions check_args(int argc, char **argv);
 double driver(double time);
-void update_positions(double* local_positions, int local_size, double left_val, double* new_left_val, double time);
+void update_positions(double* local_positions, int local_size,
+                      double left_val, double time);
 void print_header(FILE* out_file, int points);
 
-//Main Function
+//Main
 int main(int argc, char **argv)
 {
     int rank, size;
+
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     ProgramOptions opts;
-    if(rank == 0) {
+
+    if(rank == 0)
         opts = check_args(argc, argv);
-    }
-    // Broadcast options to all ranks
+
     MPI_Bcast(&opts, sizeof(ProgramOptions), MPI_BYTE, 0, MPI_COMM_WORLD);
 
     int points = opts.points;
@@ -38,148 +40,183 @@ int main(int argc, char **argv)
     int time_steps = cycles * samples + 1;
     double step_size = 1.0 / samples;
 
-    // Determine chunk for each process
-    int base_points = points / size;
+    //Timing Variables
+    double total_start, total_end;
+    double comp_time = 0.0;
+    double comm_time = 0.0;
+    double gather_time = 0.0;
+    double write_time = 0.0;
+
+    int base = points / size;
     int remainder = points % size;
-    int local_size = base_points + (rank < remainder ? 1 : 0);
 
-    int offset = rank * base_points + (rank < remainder ? rank : remainder);
+    int local_size = base + (rank < remainder ? 1 : 0);
 
-    double* local_positions = (double*) malloc(local_size * sizeof(double));
+    int* recvcounts = NULL;
+    int* displs = NULL;
+
+    if(rank == 0) {
+        recvcounts = malloc(size * sizeof(int));
+        displs = malloc(size * sizeof(int));
+        for(int i=0; i<size; i++) {
+            recvcounts[i] = base + (i < remainder ? 1 : 0);
+            displs[i] = i * base + (i < remainder ? i : remainder);
+        }
+    }
+
+    double* local_positions = calloc(local_size, sizeof(double));
     double* global_positions = NULL;
+
     if(rank == 0)
-        global_positions = (double*) malloc(points * sizeof(double));
-
-    for(int i=0; i<local_size; i++)
-        local_positions[i] = 0.0;
-
-    double* time_stamps = (double*) malloc(time_steps * sizeof(double));
-    for(int t=0; t<time_steps; t++)
-        time_stamps[t] = t * step_size;
+        global_positions = malloc(points * sizeof(double));
 
     FILE* out_file = NULL;
+
     if(rank == 0) {
         out_file = fopen(opts.output_file, "w");
         if(!out_file) {
-            fprintf(stderr, "Could not open output file: %s\n", opts.output_file);
+            fprintf(stderr, "Error opening output file.\n");
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
         print_header(out_file, points);
     }
 
-    //Main Time Loop
-    for(int t=0; t<time_steps; t++)
+    //Simulation
+    total_start = MPI_Wtime();
+
+    for(int t = 0; t < time_steps; t++)
     {
-        double left_val = 0.0, right_val = 0.0;
-        double new_left_val = 0.0;
+        double time = t * step_size;
+        double left_val = 0.0;
+        double t0;
 
-        // Send receive boundary values with neighbors
-        if(rank > 0) {
-            MPI_Recv(&left_val, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        }
-        if(rank < size-1) {
-            MPI_Send(&local_positions[local_size-1], 1, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
-        }
+        //Communication
+        t0 = MPI_Wtime();
 
-        // Update local positions
-        update_positions(local_positions, local_size, left_val, &new_left_val, time_stamps[t]);
+        if(rank > 0)
+            MPI_Recv(&left_val, 1, MPI_DOUBLE, rank-1, 0,
+                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        // Send new first element to previous rank
-        if(rank > 0) {
-            MPI_Send(&local_positions[0], 1, MPI_DOUBLE, rank-1, 1, MPI_COMM_WORLD);
-        }
-        if(rank < size-1) {
-            MPI_Recv(&right_val, 1, MPI_DOUBLE, rank+1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        }
+        if(rank < size-1)
+            MPI_Send(&local_positions[local_size-1], 1,
+                     MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
 
-        // Gather all positions to rank 0
-        int* recvcounts = NULL;
-        int* displs = NULL;
-        if(rank == 0) {
-            recvcounts = (int*) malloc(size * sizeof(int));
-            displs = (int*) malloc(size * sizeof(int));
-            for(int p=0; p<size; p++) {
-                recvcounts[p] = points / size + (p < remainder ? 1 : 0);
-                displs[p] = p * (points / size) + (p < remainder ? p : remainder);
-            }
-        }
+        comm_time += MPI_Wtime() - t0;
+
+        //Computation
+        t0 = MPI_Wtime();
+
+        update_positions(local_positions, local_size, left_val, time);
+
+        comp_time += MPI_Wtime() - t0;
+
+        //Gather
+        t0 = MPI_Wtime();
 
         MPI_Gatherv(local_positions, local_size, MPI_DOUBLE,
-                    global_positions, recvcounts, displs, MPI_DOUBLE,
-                    0, MPI_COMM_WORLD);
+                    global_positions, recvcounts, displs,
+                    MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-        // Rank 0 writes CSV
+        gather_time += MPI_Wtime() - t0;
+
+        
         if(rank == 0) {
-            fprintf(out_file, "%d, %lf", t, time_stamps[t]);
+            t0 = MPI_Wtime();
+
+            fprintf(out_file, "%d, %f", t, time);
             for(int i=0; i<points; i++)
-                fprintf(out_file, ", %lf", global_positions[i]);
+                fprintf(out_file, ", %f", global_positions[i]);
             fprintf(out_file, "\n");
-        }
 
-        if(rank == 0) {
-            free(recvcounts);
-            free(displs);
+            write_time += MPI_Wtime() - t0;
         }
     }
 
-    //Cleanup
-    if(rank == 0) fclose(out_file);
+    total_end = MPI_Wtime();
+    double total_time = total_end - total_start;
+
+    //Timing Results
+    double max_comp, max_comm, max_gather, max_write, max_total;
+
+    MPI_Reduce(&comp_time, &max_comp, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&comm_time, &max_comm, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&gather_time, &max_gather, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&write_time, &max_write, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&total_time, &max_total, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    if(rank == 0) {
+        printf("\n===== TIMING RESULTS =====\n");
+        printf("Total runtime:      %f seconds\n", max_total);
+        printf("Computation time:   %f seconds\n", max_comp);
+        printf("Communication time: %f seconds\n", max_comm);
+        printf("Gather time:        %f seconds\n", max_gather);
+        printf("Write time:         %f seconds\n", max_write);
+        printf("==========================\n");
+    }
+
+
+    if(rank == 0) {
+        fclose(out_file);
+        free(global_positions);
+        free(recvcounts);
+        free(displs);
+    }
+
     free(local_positions);
-    if(rank == 0) free(global_positions);
-    free(time_stamps);
 
     MPI_Finalize();
     return 0;
 }
 
-//Functions
+//checks
+
 ProgramOptions check_args(int argc, char **argv)
 {
-    ProgramOptions opts;
-
     if(argc != 5) {
-        fprintf(stderr, "Usage: %s <points> <cycles> <samples> <output_file>\n", argv[0]);
+        fprintf(stderr,
+        "Usage: %s <points> <cycles> <samples> <output_file>\n",
+        argv[0]);
         exit(1);
     }
 
+    ProgramOptions opts;
     opts.points = atoi(argv[1]);
     opts.cycles = atoi(argv[2]);
     opts.samples = atoi(argv[3]);
     strcpy(opts.output_file, argv[4]);
 
     if(opts.points <= 0 || opts.cycles <= 0 || opts.samples <= 0) {
-        fprintf(stderr, "All numerical arguments must be positive.\n");
+        fprintf(stderr, "All numeric arguments must be positive.\n");
         exit(1);
     }
 
     return opts;
 }
 
-// Simple harmonic driver for first element
 double driver(double time)
 {
-    return sin(time * 2.0 * M_PI);
+    return sin(2.0 * M_PI * time);
 }
 
-// Update local positions "follow the leader"
-void update_positions(double* local_positions, int local_size, double left_val, double* new_left_val, double time)
+void update_positions(double* local_positions,
+                      int local_size,
+                      double left_val,
+                      double time)
 {
-    double prev = local_positions[0];
-    if(left_val != 0.0)
-        local_positions[0] = left_val;
-    else
-        local_positions[0] = driver(time);
+    double prev;
 
-    for(int i=1; i<local_size; i++) {
+    if(left_val != 0.0)
+        prev = left_val;
+    else
+        prev = driver(time);
+
+    for(int i = 0; i < local_size; i++) {
         double temp = local_positions[i];
         local_positions[i] = prev;
         prev = temp;
     }
-
-    *new_left_val = local_positions[local_size-1];
 }
 
-// Print CSV header
 void print_header(FILE* out_file, int points)
 {
     fprintf(out_file, "#, time");

@@ -41,3 +41,5 @@
 
 - added velocity and acceleration vectors, that change with each time step
 
+- changin the values for "k", "m" and "dt" we can create an animaton for any string behaviour
+
